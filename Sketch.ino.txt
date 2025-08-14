@@ -1,0 +1,84 @@
+#include "DHT.h"
+
+#define DHTPIN 4
+#define DHTTYPE DHT22
+#define HEATER_PIN 5
+
+DHT dht(DHTPIN, DHTTYPE);
+
+float targetTemp = 60.0;
+float overheatTemp = 80.0;
+float stabilizingRange = 2.0;
+
+enum State { IDLE, HEATING, STABILIZING, TARGET_REACHED, OVERHEAT };
+State currentState = IDLE;
+
+void setup() {
+  Serial.begin(115200);
+  dht.begin();
+  pinMode(HEATER_PIN, OUTPUT);
+  digitalWrite(HEATER_PIN, LOW);
+}
+
+void loop() {
+  float temp = dht.readTemperature();
+  if (isnan(temp)) {
+    Serial.println("Error reading temperature!");
+    delay(1000);
+    return;
+  }
+
+  switch (currentState) {
+    case IDLE:
+      if (temp < targetTemp - stabilizingRange) {
+        currentState = HEATING;
+        digitalWrite(HEATER_PIN, HIGH);
+      }
+      break;
+
+    case HEATING:
+      if (temp >= targetTemp - stabilizingRange) {
+        currentState = STABILIZING;
+      }
+      break;
+
+    case STABILIZING:
+      if (temp >= targetTemp && temp < overheatTemp) {
+        currentState = TARGET_REACHED;
+        digitalWrite(HEATER_PIN, LOW);
+      } else if (temp >= overheatTemp) {
+        currentState = OVERHEAT;
+      }
+      break;
+
+    case TARGET_REACHED:
+      if (temp < targetTemp - stabilizingRange) {
+        currentState = HEATING;
+        digitalWrite(HEATER_PIN, HIGH);
+      }
+      break;
+
+    case OVERHEAT:
+      digitalWrite(HEATER_PIN, LOW);
+      Serial.println("OVERHEAT! Heater OFF!");
+      break;
+  }
+
+  Serial.print("Temp: ");
+  Serial.print(temp);
+  Serial.print(" °C | State: ");
+  Serial.println(stateToString(currentState));
+
+  delay(1000);
+}
+
+String stateToString(State s) {
+  switch(s) {
+    case IDLE: return "IDLE";
+    case HEATING: return "HEATING";
+    case STABILIZING: return "STABILIZING";
+    case TARGET_REACHED: return "TARGET_REACHED";
+    case OVERHEAT: return "OVERHEAT";
+  }
+  return "";
+}
